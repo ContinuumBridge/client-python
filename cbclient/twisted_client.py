@@ -5,36 +5,33 @@ import retrying
 import Queue
 from zope.interface import implementer
 from twisted.web import proxy
-from twisted.internet import reactor
-from twisted.internet import protocol
+from twisted.internet import reactor, protocol
 from twisted.internet.protocol import ClientFactory, ReconnectingClientFactory
-from twisted.internet.interfaces import IFileDescriptor, IReadDescriptor
+from twisted.internet.interfaces import ITransport, IFileDescriptor, IReadDescriptor
 from twisted.python import log
 import sys
 log.startLogging(sys.stdout)
 
-#from .socket_io import SocketThread, SocketCommand, SocketReply
+from .socket_io import SocketCommand, SocketReply
 from .socket_wrapper import SocketThreadWrapper
 
-@implementer(IReadDescriptor, IFileDescriptor)
-class CBConnection(object):
+#@implementer(IReadDescriptor, IFileDescriptor)
+#@implementer(IReadDescriptor)
+class CBProtocol(protocol.Protocol):
 
     authenticated = False
     connected = False
 
-    def __init__(self, factory, address=None):
+    def __init__(self, factory, key=None, is_bridge=False, address=None):
 
         print "CBConnection __init__"
 
         self.factory = factory
         self.address = address
 
-        self.socket_wrapper = SocketThreadWrapper(is_bridge=True)
-        #self.socket.on('message', self.onMessage)
-        #self.socks=socks
-        self.factory.connections.add(self)
-
-        self.factory.reactor.addReader(self)
+        #self.socket_wrapper = SocketThreadWrapper(key=key, is_bridge=is_bridge, address=address)
+        #self.factory.connections.add(self)
+        #self.factory.reactor.addReader(self)
         self.doRead()
 
     def connectionMade(self):
@@ -55,38 +52,34 @@ class CBConnection(object):
 
 
     def connectionLost(self, reason):
+        """
+        Called when the connection is lost.
+        """
         print "CBConnection connectionLost"
-        self.socks.transport.loseConnection()
+        #self.socks.transport.loseConnection()
 
-    def dataReceived(self,data):
+    def dataReceived(self, message):
         print "CBConnection dataReceived"
-        self.socks.write(data)
+
+        if message.type == SocketReply.MESSAGE:
+            self.onMessage(message.data)
+        if message.type == SocketReply.CONNECTED:
+            self.connectionMade()
+        elif message.type == SocketReply.DISCONNECTED:
+            self.connectionLost()
 
     def doRead(self):
-
-        print "doRead"
-
-        try:
-            reply = self.socket.reply_q.get(block=False)
-
-            if reply.type == SocketReply.MESSAGE:
-                log.callWithLogger(self, self.messageReceived, reply.data)
-
-            elif reply.type == SocketReply.CONNECTED:
-                print "Client received CONNECTED"
-
-            elif reply.type == SocketReply.DISCONNECTED:
-                print "Client received DISCONNECTED"
-
-        except Queue.Empty:
-            pass
-
-
+        print "CBConnection doRead"
+        #message = self.socket_wrapper.do_read(self.onMessage)
 
     def write(self, data):
         print "CBConnection write", data
-        self.socks.log(self,data)
+
+        self.socket_wrapper.send(data)
+        '''
+        self.socks.log(self, data)
         self.transport.write(data)
+        '''
 
     def shutdown(self):
 
@@ -104,7 +97,7 @@ class CBConnection(object):
 
 class CBConnectionFactory(ClientFactory):
 
-    protocol = CBConnection
+    protocol = CBProtocol
 
     reactor = reactor
 
@@ -131,8 +124,8 @@ class CBConnectionFactory(ClientFactory):
         print 'Factory started to connect.'
 
     def clientConnectionFailed(self, connector, reason):
-        print 'Factory clientConnectionFailed'
+        print 'Factory clientConnectionFailed', reason
 
     def clientConnectionLost(self, connector, reason):
-        print 'Factory clientConnectionLost'
+        print 'Factory clientConnectionLost', reason
 

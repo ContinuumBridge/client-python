@@ -35,8 +35,9 @@ class SocketReply(object):
     """
     CONNECTED, DISCONNECTED, MESSAGE, ERROR, SUCCESS = range(5)
 
-    def __init__(self, type, data=None):
+    def __init__(self, type, id=None, data=None):
         self.type = type
+        self.id = id
         self.data = data
 
 
@@ -45,20 +46,23 @@ class SocketThread(threading.Thread):
         can be controlled via the cmd_q Queue attribute. Replies are
         placed in the reply_q Queue attribute.
     """
-    def __init__(self, is_bridge=False, cmd_q=None, reply_q=None):
+    def __init__(self, key=None, is_bridge=False, address=None, cmd_q=None, reply_q=None):
         print "CBClientThread init"
-        super(SocketThread, self).__init__()
+        #super(SocketThread, self).__init__()
         self.cmd_q = cmd_q or Queue.Queue()
         self.reply_q = reply_q or Queue.Queue()
         self.alive = threading.Event()
         self.alive.set()
+        print "__init__ self.alive.isSet() is", self.alive.isSet()
 
-        self.auth_url = "https://" + CB_ADDRESS \
+        cb_address = address if address else CB_ADDRESS
+        self.auth_url = "https://" + cb_address \
                             + (BRIDGE_AUTH_SUFFIX if is_bridge else CLIENT_AUTH_SUFFIX)
-        self.socket_url = "https://" + CB_ADDRESS \
+        self.socket_url = "https://" + cb_address \
                             + (BRIDGE_SOCKET_SUFFIX if is_bridge else CLIENT_SOCKET_SUFFIX)
         self.socket_port = 443
 
+        self.key = key
         self.session_id = ""
         self.socket = None
 
@@ -69,15 +73,20 @@ class SocketThread(threading.Thread):
 #           ClientCommand.RECEIVE: self._handle_RECEIVE,
         }
 
+        super(SocketThread, self).__init__()
+
     def run(self):
         print "CBClientThread run"
         print "self.alive.isSet() is", self.alive.isSet()
+        if self.alive.isSet():
+            print "hello"
         while self.alive.isSet():
-            print "while self.alive.isSet() is", self.alive.isSet()
+            print "while self.alive.isSet() 1 is", self.alive.isSet()
             if not self.session_id:
                 self.authorise()
                 self.connect()
 
+            print "while self.alive.isSet() 2 is", self.alive.isSet()
             try:
                 # Queue.get with timeout to allow checking self.alive
                 cmd = self.cmd_q.get(True, 0.5)
@@ -88,15 +97,17 @@ class SocketThread(threading.Thread):
             self.socket.wait(seconds=0.5)
 
     def join(self, timeout=None):
+        print "join"
         self.alive.clear()
         threading.Thread.join(self, timeout)
 
     def authorise(self):
 
         self.session_id = ""
+        print "self.key is", self.key
         print "authorise"
         print "self.auth_url is", self.auth_url
-        auth_data = '{"key": "' + KEY + '"}'
+        auth_data = '{"key": "' + self.key + '"}'
         auth_headers = {'content-type': 'application/json'}
         response = requests.post(self.auth_url, data=auth_data, headers=auth_headers)
         print "response.text is", response.text

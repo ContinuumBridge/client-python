@@ -1,15 +1,20 @@
 
 from autobahn.twisted.websocket import WebSocketClientProtocol, WebSocketClientFactory
 from twisted.internet.protocol import ClientFactory, ReconnectingClientFactory
-from twisted.python import log
+#from twisted.python import log
 from twisted.logger import Logger
 log = Logger()
 
 class CBClientProtocol(WebSocketClientProtocol):
 
+    def __init__(self, *args, **kwargs):
+        self.factory = kwargs.pop('factory', None)
+        super(CBClientProtocol, self).__init__(*args, **kwargs)
+        if self.factory is not None:
+            self.factory.connection = self
+
     def onConnect(self, response):
         self.factory.resetDelay()
-        self.factory.connections.append(self)
         self.handleConnect(response)
 
     def onOpen(self):
@@ -19,31 +24,28 @@ class CBClientProtocol(WebSocketClientProtocol):
         self.handleMessage(message, isBinary)
 
     def onClose(self, wasClean, code, reason):
-        self.factory.connections.remove(self)
         self.handleClose(wasClean, code, reason)
-        #self.socks.transport.loseConnection()
 
 
 class CBSocketFactory(WebSocketClientFactory, ReconnectingClientFactory):
 
-    connections = []
-    '''
-    def startedConnecting(self, connector):
-        print 'Factory started to connect.'
-    '''
+    connection = None
+
+    @property
+    def connected(self):
+        try:
+            return self.connection.state == CBClientProtocol.STATE_OPEN
+        except AttributeError:
+            return False
+
+    def buildProtocol(self, addr):
+        p = self.protocol(factory=self)
+        return p
 
     def sendMessage(self, data):
-        for connection in self.connections:
-            connection.sendMessage(data)
-
-    def clientConnectionFailed(self, connector, reason):
-        self.handleClientConnectionFailed(self, connector, reason)
-        self.stopTrying()
-        #self.retry(connector)
+        #for connection in self.connections:
+        self.connection.sendMessage(data)
 
     def clientConnectionLost(self, connector, reason):
-        print("Client connection lost .. retrying ..")
-        print "reason is", reason
-        #self.stopTrying()
-        self.retry(connector)
-
+        #self.connection = None
+        self.handleClientConnectionLost(self, connector, reason)

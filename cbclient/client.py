@@ -3,17 +3,20 @@ from cookielib import CookieJar
 import json
 from math import ceil
 import random
+import sys
 from twisted.internet import ssl
 from twisted.internet.defer import Deferred
-from twisted.internet.protocol import Protocol, ClientFactory, ReconnectingClientFactory
+from twisted.internet.protocol import Protocol
 from twisted.web.client import Agent, CookieAgent
 from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 
 from twisted.internet import reactor, defer
-from twisted.logger import Logger
-log = Logger()
+#from twisted.logger import Logger
+#log = Logger()
 #log.startLogging(sys.stdout)
+import logging
+import logging.handlers
 
 from zope.interface import implements
 
@@ -72,8 +75,22 @@ class CBClient(object):
 
     socket_max_backoff = 100
 
-    def __init__(self, address=None, is_bridge=False, key=None, reactor=reactor):
+    def __init__(self, address=None, is_bridge=False
+                 , key=None, reactor=reactor, logger=None):
         #self.connections = set()
+        # Setup logging
+        if logger:
+            self.logger = logger
+        else:
+            format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            logging.basicConfig(format=format, level=logging.DEBUG)
+            logger = self.logger = logging.getLogger('CBClient')
+            #handler = logging.StreamHandler(sys.stdout)
+            #handler.setLevel(logging.DEBUG)
+            #formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            #handler.setFormatter(formatter)
+            #logger.addHandler(handler)
+            logger.info("Testing the logging")
 
         self.reactor = reactor
         self.auth_url = AUTH_PROTOCOL + "://" + CB_ADDRESS + ":" + str(AUTH_PORT) \
@@ -88,50 +105,38 @@ class CBClient(object):
 
     def onConnect(self, response):
         # Override this
-        log.info("CBClient Connected to {0}".format(response.peer))
-        pass
+        self.logger.info("CBClient Connected to {0}".format(response.peer))
 
     def _onConnect(self, response):
         self.onConnect(response)
 
     def onOpen(self):
         # Override this
-        log.info("CB Client open")
+        self.logger.info("CB Client open")
 
     def _onOpen(self):
         self.onOpen()
 
     def onMessage(self, response, isBinary):
-        print "response is", response
-        print "response.decode('utf8') is", response.decode('utf8')
-
-        log.info("CB Client message received: ")
-        message = "CB Client message received: {0}".format(response.decode('utf8'))
-        #m = 'CB Client message received: {"source":"cb","body":"connected"}'
-        #m = 'CB Client message received: "source":"cb","body":"connected"'
-        log.info(m)
         # Override this
         if isBinary:
-            log.info("CB Client binary message received: {0} bytes".format(len(response)))
+            self.logger.info("CB Client binary message received: {0} bytes".format(len(response)))
         else:
-            pass
-            #log.info(u"CB Client message received: " + response.decode('utf8'))
-            #log.info("CB Client message received: {0}".format(response.decode('utf8')))
+            self.logger.info("CB Client message received: {0}".format(response.decode('utf8')))
 
     def _onMessage(self, response, isBinary):
         self.onMessage(response, isBinary)
 
     def onClose(self, wasClean, code, reason):
         # Override this
-        log.info("CB Client closed. Reason: {0}".format(reason))
+        self.logger.info("CB Client closed. Reason: {0}".format(reason))
 
     def _onClose(self, wasClean, code, reason):
         self.onClose(wasClean, code, reason)
 
     def authenticate(self):
         #self.session_id = cb_authenticate(self.auth_url)
-        log.info("Authenticating")
-        #print "self.auth_url is", self.auth_url
+        self.logger.info("Authenticating")
         cookieJar = CookieJar()
         agent = CookieAgent(Agent(self.reactor), cookieJar)
         data = '{"key": "' + self.auth_key + '"}'
@@ -146,17 +151,16 @@ class CBClient(object):
         d.addErrback(self.handleAuthFailed)
 
     def handleAuthFailed(self, reason):
-        log.warn("Authentication failed. Reason: {0}".format(reason))
+        self.logger.warning("Authentication failed. Reason: {0}".format(reason))
         self.reauthenticate()
 
     def handleAuthResponse(self, response, cookieJar):
-        print "handle_auth_response response", response
         finished = Deferred()
         if response:
             response.deliverBody(BodyPrinter(finished))
             finished.addCallback(self.handleAuthResponseBody, cookieJar)
         else:
-            log.warn("No response to authentication request")
+            self.logger.warning("No response to authentication request")
             self.reauthenticate()
 
     def handleAuthResponseBody(self, bodyJSON, cookieJar):
@@ -164,27 +168,28 @@ class CBClient(object):
         try:
             body = json.loads(bodyJSON)
         except ValueError, e:
-            log.error("Could not parse auth response. Reason: {0}".format(e))
+            self.logger.error("Could not parse auth response. Reason: {0}".format(e))
             return self.reauthenticate()
 
         for cookie in cookieJar:
             if cookie.name == "sessionid":
                 self.session_id = cookie.value
-                print "sessionid", cookie.value
         if self.session_id:
             self.auth_retry_num = 0
-            self.cbid = body.get('cbid', '')
-            print "self.cbid is", self.cbid
+            try:
+                self.cbid = body['cbid']
+            except KeyError:
+                self.logger.warning("No cbid provided in auth response, sending messages will not work as expected")
             self.setupSocket()
         else:
-            log.warn("No session id in authentication response")
+            self.logger.warning("No session id in authentication response")
             self.reauthenticate()
 
     def reauthenticate(self):
 
         exp_backoff = pow(self.auth_retry_num, 2)
         backoff = min(ceil(exp_backoff * random.random()), self.auth_max_backoff)
-        log.info("Trying again in {0} seconds.".format(int(backoff)))
+        self.logger.info("Trying again in {0} seconds.".format(int(backoff)))
         self.auth_retry_num += 1
         self.reactor.callLater(backoff, self.authenticate)
 
@@ -196,8 +201,7 @@ class CBClient(object):
                                                 , self.socket_address_suffix)
 
         factory = self.factory = CBSocketFactory(socket_url, headers=headers)
-        factory.handleClientConnectionFailed = self.handleClientConnectionFailed
-        factory.handleClientConnectionLost = self.handleClientConnectionLost
+        factory.handleClientConnectionLost = self.handleFactoryConnectionLost
 
         factory.protocol = protocol = CBClientProtocol
         protocol.handleMessage = self._onMessage
@@ -206,10 +210,11 @@ class CBClient(object):
         protocol.handleClose = self._onClose
 
         if AUTH_PROTOCOL == "https":
-            log.debug("Connecting ssl")
+            self.logger.debug("Connecting using SSL")
             contextFactory = ssl.ClientContextFactory()
             self.connector = self.reactor.connectSSL(self.socket_address, self.socket_port, self.factory, contextFactory)
         else:
+            self.logger.debug("Connecting without SSL")
             self.connector = self.reactor.connectTCP(self.socket_address, self.socket_port, self.factory)
 
     def sendMessage(self, destination, body):
@@ -219,17 +224,25 @@ class CBClient(object):
             'source': self.cbid,
             'body': body
         }
+        if self.factory.connected:
+            self.logger.info("Sending message to {0}. Body: {1}".format(destination, body))
+            reactor.callFromThread(self.factory.sendMessage, json.dumps(message).encode('utf8'))
+        else:
+            self.logger.warning("Could not send message to {0}" \
+                                ", the connection is not open. Body: {1}".format(destination, body))
 
-        reactor.callFromThread(self.factory.sendMessage, json.dumps(message).encode('utf8'))
+        return self.factory.connected
 
-    def handleClientConnectionFailed(self, factory, connector, reason):
-        log.info("Client socket connection failed. Reason: {0}".format(reason))
-        self.destroySocket()
-        self.reauthenticate()
+    def handleFactoryConnectionLost(self, factory, connector, reason):
 
-    def handleClientConnectionLost(self, factory, connector, reason):
-        log.info("Client socket connection lost. Reason: {0}".format(reason))
-        factory.retry(connector)
+        closeReason = factory.connection.wasNotCleanReason
+        self.logger.info("Client socket connection lost. Reason: {0}".format(closeReason))
+
+        if closeReason == "WebSocket connection upgrade failed (403 - Forbidden)":
+            self.destroySocket()
+            self.reauthenticate()
+        else:
+            factory.retry(connector)
 
     def destroySocket(self):
 
@@ -238,4 +251,3 @@ class CBClient(object):
         if self.connector:
             self.connector.disconnect()
             self.connector = None
-

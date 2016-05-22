@@ -4,6 +4,7 @@ from twisted.internet import reactor
 import os.path, sys
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
 from cbclient import CBClient
+import json
 
 class MyBridgeClient(CBClient):
 
@@ -15,14 +16,36 @@ class MyBridgeClient(CBClient):
         self.logger.info("WebSocket connection open.")
 
         def hello():
-            self.sendMessage("CID52", "Hey")
-            #self.sendMessage(b"\x00\x01\x03\x04", isBinary=True)
-            self.factory.reactor.callLater(10, hello)
+            destination = "cb",
+            body = {
+                "verb": "patch",
+                "resource": "/api/bridge/v1/bridge/106/",
+                "body": {
+                "status": "starting"
+                }
+            }
+            client.sendMessage(destination, body)
+            #client.sendMessage("CID52", {"key": "value"})
+            self.factory.reactor.callLater(10, hello2)
 
+        def hello2():
+            destination = "cb",
+            body = {
+                "verb": "patch",
+                "resource": "/api/bridge/v1/bridge/106/",
+                "body": {
+                "status": "running"
+                }
+            }
+            client.sendMessage(destination, body)
+            #client.sendMessage("CID52", {"key": "value"})
+            self.factory.reactor.callLater(10, hello)
+        
         # start sending messages every second ..
         hello()
 
     def onMessage(self, message, isBinary):
+        self.logger.info("onMessage: " + str(message))
         self.logger.info("")
 
     '''
@@ -30,7 +53,20 @@ class MyBridgeClient(CBClient):
         print "CBClientProtocol onClose"
     '''
 
+def goForIt():
+    destination = "cb",
+    body = {
+        "verb": "patch",
+        "resource": "/api/bridge/v1/bridge/106/",
+        "body": {
+        "status": "running"
+        }
+    }
+    client.sendMessage(destination, body)
+    #client.sendMessage("CID52", {"key": "value"})
+    reactor.callLater(4, goForIt)
 
 client = MyBridgeClient(is_bridge=True, reactor=reactor)
+#reactor.callLater(10, goForIt)
 
 reactor.run()

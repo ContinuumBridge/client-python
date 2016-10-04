@@ -9,7 +9,6 @@ class MyBridgeClient(CBClient):
 
     def onConnect(self, response):
         self.logger.info("MyBridgeClient Server connected: {0}".format(response.peer))
-        self.factory.resetDelay()
 
     def onOpen(self):
         self.logger.info("WebSocket connection open.")
@@ -23,7 +22,7 @@ class MyBridgeClient(CBClient):
         hello()
 
     def onMessage(self, message, isBinary):
-        self.logger.info("")
+        self.logger.info("Received message {0}".format(message))
 
     '''
     def onClose(self, wasClean, code, reason):
@@ -31,6 +30,8 @@ class MyBridgeClient(CBClient):
     '''
 
 
-client = MyBridgeClient(is_bridge=True, reactor=reactor)
+client = MyBridgeClient(key="",
+                        is_bridge=True,
+                        reactor=reactor)
 
 reactor.run()

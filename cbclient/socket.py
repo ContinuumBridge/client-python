@@ -2,8 +2,8 @@
 from autobahn.twisted.websocket import WebSocketClientProtocol, WebSocketClientFactory
 from twisted.internet.protocol import ClientFactory, ReconnectingClientFactory
 #from twisted.python import log
-from twisted.logger import Logger
-log = Logger()
+#from twisted.logger import Logger
+#log = Logger()
 
 class CBClientProtocol(WebSocketClientProtocol):
 

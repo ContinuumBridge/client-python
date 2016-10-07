@@ -1,4 +1,10 @@
-
+#!/usr/bin/env python
+# client.py
+# Copyright (C) ContinuumBridge Limited, 2016 - All Rights Reserved
+# Unauthorized copying of this file, via any medium is strictly prohibited
+# Proprietary and confidential
+# Written by Mark Claydon
+#
 from cookielib import CookieJar
 import json
 from math import ceil
@@ -12,9 +18,6 @@ from twisted.web.http_headers import Headers
 from twisted.web.iweb import IBodyProducer
 
 from twisted.internet import reactor, defer
-#from twisted.logger import Logger
-#log = Logger()
-#log.startLogging(sys.stdout)
 import logging
 import logging.handlers
 
@@ -75,22 +78,16 @@ class CBClient(object):
 
     socket_max_backoff = 100
 
-    def __init__(self, address=None, is_bridge=False
-                 , key=None, reactor=reactor, logger=None):
+    def __init__(self, address=None, is_bridge=False, key=None, reactor=reactor, logger=None):
         #self.connections = set()
         # Setup logging
         if logger:
             self.logger = logger
         else:
-            format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-            logging.basicConfig(format=format, level=logging.DEBUG)
+            format = "%(asctime)s %(levelname)s: %(name)s %(message)s"
+            logging.basicConfig(filename=logFile,level=logLevel,format=format)
             logger = self.logger = logging.getLogger('CBClient')
-            #handler = logging.StreamHandler(sys.stdout)
-            #handler.setLevel(logging.DEBUG)
-            #formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            #handler.setFormatter(formatter)
-            #logger.addHandler(handler)
-            logger.info("Testing the logging")
+        logger.info("Testing the logging")
 
         self.reactor = reactor
         self.auth_url = AUTH_PROTOCOL + "://" + CB_ADDRESS + ":" + str(AUTH_PORT) \

@@ -15,15 +15,15 @@ class MyClient(CBClient):
 
         def hello():
             self.sendMessage("BID2", "Hey")
-            #self.sendMessage(b"\x00\x01\x03\x04", isBinary=True)
-            self.factory.reactor.callLater(30, hello)
+            self.factory.reactor.callLater(10, hello)
 
-        # start sending messages every second ..
+        # start sending messages every ten seconds ..
         hello()
 
 
-client = MyClient(key=""
-                  , reactor=reactor)
+client = MyClient(key="",
+                  is_bridge=False,
+                  reactor=reactor)
 
 reactor.run()
 

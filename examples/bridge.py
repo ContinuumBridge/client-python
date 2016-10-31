@@ -14,11 +14,13 @@ class MyBridgeClient(CBClient):
         self.logger.info("WebSocket connection open.")
 
         def hello():
-            self.sendMessage("CID52", "Hey")
-            #self.sendMessage(b"\x00\x01\x03\x04", isBinary=True)
+            # If source kwarg is omitted the source is set to this BID
+            self.sendMessage("CID17/AID58", {
+                "body": [],
+            }, source="BID3/AID57")
             self.factory.reactor.callLater(10, hello)
 
-        # start sending messages every second ..
+        # start sending messages every ten seconds ..
         hello()
 
     def onMessage(self, message, isBinary):

@@ -218,11 +218,12 @@ class CBClient(object):
             self.logger.debug("Connecting without SSL")
             self.connector = self.reactor.connectTCP(self.socket_address, self.socket_port, self.factory)
 
-    def sendMessage(self, destination, body):
+    def sendMessage(self, destination, body, source=""):
 
+        print "source is", source
         message = {
             'destination': destination,
-            'source': self.cbid,
+            'source': source or self.cbid,
             'body': body
         }
         if self.factory.connected:
